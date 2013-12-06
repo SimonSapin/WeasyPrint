@@ -18,6 +18,7 @@ from ..formatting_structure import boxes
 from ..css.properties import Dimension
 from .percentages import resolve_percentages, resolve_one_percentage
 from .preferred import table_and_columns_preferred_widths
+from collections import defaultdict
 
 
 def table_layout(context, table, max_position_y, skip_stack,
@@ -85,6 +86,7 @@ def table_layout(context, table, max_position_y, skip_stack,
         else:
             skip, skip_stack = skip_stack
             assert not skip_stack  # No breaks inside rows for now
+        rowspan_heights = defaultdict(float)
         for index_row, row in group.enumerate_skip(skip):
             resolve_percentages(row, containing_block=table)
             row.position_x = rows_x
@@ -170,11 +172,17 @@ def table_layout(context, table, max_position_y, skip_stack,
                 if row.height == 'auto':
                     row.height = row_bottom_y - row.position_y
                 else:
-                    row.height = max(row.height, max(
-                        row_cell.height for row_cell in ending_cells))
+                    row.height = max(
+                        row.height, *(
+                            row_cell.height - rowspan_heights.pop(row_cell, 0)
+                            for row_cell in ending_cells))
             else:
                 row_bottom_y = row.position_y
                 row.height = 0
+
+            for cells in ending_cells_by_row:
+                for cell in cells:
+                    rowspan_heights[cell] += row.height + border_spacing_y
 
             # Add extra padding to make the cells the same height as the row
             for cell in ending_cells:
